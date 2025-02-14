@@ -9,7 +9,7 @@ class YouTubeTranscriptAPI {
   static async getTranscript(videoId, lang = 'en') {
     try {
       // First get available captions
-      const tracks = await this.getYoutubeTrackByAPI(videoId);
+      const tracks = await this.getYoutubeTrackByAPI(videoId, lang);
       if (!tracks || !tracks.captionTracksMap) {
         throw new Error('No captions available for this video');
       }
@@ -32,7 +32,7 @@ class YouTubeTranscriptAPI {
     }
   }
 
-  static async getYoutubeTrackByAPI(videoId) {
+  static async getYoutubeTrackByAPI(videoId, lang) {
     try {
       const response = await fetch("https://www.youtube.com/youtubei/v1/player", {
         method: "post",
@@ -93,9 +93,9 @@ class YouTubeTranscriptAPI {
     }
   }
 
-  static async fetchTranscript(baseUrl) {
+  static async fetchTranscript(url) {
     try {
-      const response = await fetch(baseUrl);
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
