@@ -6,124 +6,44 @@ const express = require('express');
 const app = express();
 
 class YouTubeTranscriptAPI {
-  static async getTranscript(videoId, lang = 'en') {
-    try {
-      // First get available captions
-      const tracks = await this.getYoutubeTrackByAPI(videoId, lang);
-      if (!tracks || !tracks.captionTracksMap) {
-        throw new Error('No captions available for this video');
-      }
+    constructor() {}  // Add empty constructor
 
-      // Get transcript for requested language
-      const track = tracks.captionTracksMap.get(lang) || 
-                   tracks.captionTracksMap.get(lang + '__asr') ||
-                   tracks.captionTracksMap.values().next().value; // fallback to first available
-
-      if (!track) {
-        throw new Error(`No captions available for language: ${lang}`);
-      }
-
-      // Fetch and parse the actual transcript
-      const transcriptData = await this.fetchTranscript(track.baseUrl);
-      return this.formatTranscript(transcriptData);
-    } catch (error) {
-      console.error('Error fetching transcript:', error);
-      throw error;
+    static async getTranscript(videoId, lang = 'en') {
+        const url = await this.getYoutubeTrackByAPI(videoId, lang);
+        const xml = await this.fetchTranscript(url);
+        return this.formatTranscript(xml);
     }
-  }
-
-  static async getYoutubeTrackByAPI(videoId, lang) {
-    try {
-      const response = await fetch("https://www.youtube.com/youtubei/v1/player", {
-        method: "post",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        },
-        body: JSON.stringify({
-          videoId: videoId,
-          context: {
-            client: {
-              clientName: "WEB_EMBEDDED_PLAYER",
-              clientVersion: "1.20241009.01.00"
-            }
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const captionsRenderer = data?.captions?.playerCaptionsTracklistRenderer;
-
-      if (!captionsRenderer) {
-        return { videoInfo: data };
-      }
-
-      const { captionTracks, translationLanguages } = captionsRenderer;
-      const captionTracksMap = new Map();
-
-      for (const track of captionTracks) {
-        const langKey = track.kind === "asr" 
-          ? `${track.languageCode}__asr` 
-          : track.languageCode;
-          
-        if (!langKey) continue;
+    
+    static async getYoutubeTrackByAPI(videoId, lang) {
+        const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+        const html = await response.text();
         
-        const baseLang = langKey.split("-")[0];
+        const match = html.match(/"captionTracks":(\[.*?\])/);
+        if (!match) throw new Error('No captions found for this video');
         
-        if (!captionTracksMap.has(langKey)) {
-          captionTracksMap.set(langKey, track);
-        }
-        if (!captionTracksMap.has(baseLang)) {
-          captionTracksMap.set(baseLang, track);
-        }
-      }
-
-      return {
-        captionTracksMap,
-        playerCaptionsTrackListSource: captionsRenderer
-      };
-
-    } catch (error) {
-      console.error('Error fetching YouTube tracks:', error);
-      throw error;
+        const tracks = JSON.parse(match[1]);
+        const langTrack = tracks.find(track => track.languageCode === lang);
+        if (!langTrack) throw new Error(`No captions found for language: ${lang}`);
+        
+        return langTrack.baseUrl;
     }
-  }
-
-  static async fetchTranscript(url) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.text();
-    } catch (error) {
-      console.error('Error fetching transcript data:', error);
-      throw error;
+    
+    static async fetchTranscript(url) {
+        const response = await fetch(url);
+        return await response.text();
     }
-  }
-
-  static formatTranscript(rawTranscript) {
-    // Parse XML transcript data and convert to readable format
-    const transcript = [];
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(rawTranscript, "text/xml");
-    const textElements = xmlDoc.getElementsByTagName("text");
-
-    for (let i = 0; i < textElements.length; i++) {
-      const element = textElements[i];
-      transcript.push({
-        text: element.textContent,
-        start: parseFloat(element.getAttribute("start")),
-        duration: parseFloat(element.getAttribute("dur")),
-      });
+    
+    static formatTranscript(xml) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        const texts = doc.getElementsByTagName('text');
+        
+        return Array.from(texts).map(text => ({
+            text: text.textContent,
+            start: parseFloat(text.getAttribute('start')),
+            duration: parseFloat(text.getAttribute('dur'))
+        }));
     }
-
-    return transcript;
-  }
 }
 
 // Add CORS headers for V0
@@ -150,4 +70,4 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
-module.exports = YouTubeTranscriptAPI; 
+module.exports = { YouTubeTranscriptAPI, app }; 
