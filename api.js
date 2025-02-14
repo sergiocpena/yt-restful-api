@@ -3,9 +3,11 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const { DOMParser } = require('xmldom');
 const express = require('express');
+
+// Create the express app
 const app = express();
 
-// Convert class methods to standalone functions
+// Transcript functions
 async function getTranscript(videoId, lang = 'en') {
     const url = await getYoutubeTrackByAPI(videoId, lang);
     const xml = await fetchTranscript(url);
@@ -43,7 +45,7 @@ function formatTranscript(xml) {
     }));
 }
 
-// Add CORS headers for V0
+// CORS middleware
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET');
@@ -51,7 +53,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Update endpoint to use V0's convention
+// API endpoint
 app.get('/youtube-transcript/:videoId', async (req, res) => {
     try {
         const transcript = await getTranscript(req.params.videoId, 'en');
@@ -61,10 +63,13 @@ app.get('/youtube-transcript/:videoId', async (req, res) => {
     }
 });
 
-// V0 uses process.env.PORT
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// Only start the server if this file is run directly
+if (require.main === module) {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
 
-module.exports = { getTranscript, app }; 
+// Export the app for Vercel
+module.exports = app; 
